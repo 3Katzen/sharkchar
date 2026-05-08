@@ -1,0 +1,47 @@
+version: 2.1
+
+# Define the jobs to be executed
+jobs:
+  build_and_test:
+    docker:
+      # Drupal 11 requires PHP 8.3 or higher
+      - image: cimg/php:8.3
+    steps:
+      - checkout
+      
+      # Install project dependencies using Composer
+      - run:
+          name: "Install dependencies"
+          command: composer install --no-interaction --prefer-dist
+          
+      # Verify that all PHP files have correct syntax
+      - run:
+          name: "Validate PHP syntax"
+          command: find . -name "*.php" -exec php -l {} \; | grep "No syntax errors"
+
+  deploy_to_pantheon:
+    docker:
+      - image: cimg/php:8.3
+    steps:
+      - checkout
+      - run:
+          name: "Configure Terminus and Deploy"
+          command: |
+            # This section will be expanded once Terminus and SSH keys are configured
+            echo "Preparing deployment to Pantheon..."
+            # For now, it just validates the environment
+            php -v
+
+# Orchestrate the jobs with workflows
+workflows:
+  version: 2
+  main_workflow:
+    jobs:
+      - build_and_test
+      - deploy_to_pantheon:
+          requires:
+            - build_and_test
+          filters:
+            branches:
+              only: main # Deployment only triggers on the main branch
+
