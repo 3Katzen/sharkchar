@@ -1,54 +1,66 @@
 version: 2.1
 
-# Define the jobs to be executed
+# Jobs define the individual steps of the CI/CD pipeline
 jobs:
   build_and_test:
     docker:
-      # Drupal 11 requires PHP 8.3
-      - image: cimg/php:8.3
+      # We use a specific minor version of PHP 8.3 to ensure Drupal 11 compatibility
+      - image: cimg/php:8.3.1
     steps:
       - checkout
 
-      # Install project dependencies using Composer
+      # Ensure Composer is up to date and check environment versions
       - run:
-          name: "Install dependencies"
-          command: composer install --no-interaction --prefer-dist
+          name: "Environment check and Composer update"
+          command: |
+            sudo composer self-update
+            php -v
+            composer --version
 
-      # Verify that all PHP files have correct syntax
+      # Clean previous vendor and install dependencies
+      - run:
+          name: "Install project dependencies"
+          command: |
+            rm -rf vendor
+            composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      # Validate syntax only on our code, excluding the vendor folder
       - run:
           name: "Validate PHP syntax"
-          command: find . -name "*.php" -exec php -l {} \; | grep "No syntax errors"
+          command: find . -name "*.php" -not -path "./vendor/*" -exec php -l {} \; | grep "No syntax errors"
 
   deploy_to_pantheon:
     docker:
-      - image: cimg/php:8.3
+      - image: cimg/php:8.3.1
     steps:
       - checkout
-      # Load the SSH key using the fingerprint from CircleCI settings
+      # Load the SSH key for Pantheon authentication
       - add_ssh_keys:
           fingerprints:
-            - "SHA256:uL7NIIZNEuKTe7iqgNFxY6iFODB2fStmoq/mPS5UCyc"
+            - "TU_FINGERPRINT_AQUI"
       - run:
           name: "Install Terminus and Deploy to Pantheon"
           command: |
-            # 1. Install Terminus CLI
+            # 1. Download and install Terminus
             curl -L https://github.com -o terminus
             chmod +x terminus
 
-            # 2. Authenticate with Pantheon
+            # 2. Authenticate with the machine token set in environment variables
             ./terminus auth:login --machine-token="${TERMINUS_TOKEN}"
 
-            # 3. Add Pantheon to known hosts to prevent SSH hanging
+            # 3. Prevent SSH key confirmation prompts
             ssh-keyscan -p 2222 codeserver.dev.${TERMINUS_SITE}.drush.in >> ~/.ssh/known_hosts
 
-            # 4. Configure Git and push to Pantheon
-            # Note: We use --force to ensure the Pantheon repo matches our GitHub "source of truth"
+            # 4. Git deployment to Pantheon
             git config --global user.email "circleci@example.com"
             git config --global user.name "CircleCI Deployer"
+
+            # Add Pantheon as a remote and push current main branch
+            # We use --force to ensure Pantheon stays in sync with GitHub
             git remote add pantheon ssh://codeserver.dev.${TERMINUS_SITE}@codeserver.dev.${TERMINUS_SITE}.drush.in:2222/~/repository.git
             git push pantheon main --force
 
-# Orchestrate the jobs with workflows
+# Workflows coordinate the execution of jobs
 workflows:
   version: 2
   main_workflow:
@@ -59,4 +71,4 @@ workflows:
             - build_and_test
           filters:
             branches:
-              only: main # Only deploy when changes are pushed to the main branch
+              only: main # Only trigger deployment on the main branch
