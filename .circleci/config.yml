@@ -4,16 +4,16 @@ version: 2.1
 jobs:
   build_and_test:
     docker:
-      # Drupal 11 requires PHP 8.3 or higher
+      # Drupal 11 requires PHP 8.3
       - image: cimg/php:8.3
     steps:
       - checkout
-      
+
       # Install project dependencies using Composer
       - run:
           name: "Install dependencies"
           command: composer install --no-interaction --prefer-dist
-          
+
       # Verify that all PHP files have correct syntax
       - run:
           name: "Validate PHP syntax"
@@ -24,13 +24,29 @@ jobs:
       - image: cimg/php:8.3
     steps:
       - checkout
+      # Load the SSH key using the fingerprint from CircleCI settings
+      - add_ssh_keys:
+          fingerprints:
+            - "SHA256:uL7NIIZNEuKTe7iqgNFxY6iFODB2fStmoq/mPS5UCyc"
       - run:
-          name: "Configure Terminus and Deploy"
+          name: "Install Terminus and Deploy to Pantheon"
           command: |
-            # This section will be expanded once Terminus and SSH keys are configured
-            echo "Preparing deployment to Pantheon..."
-            # For now, it just validates the environment
-            php -v
+            # 1. Install Terminus CLI
+            curl -L https://github.com -o terminus
+            chmod +x terminus
+
+            # 2. Authenticate with Pantheon
+            ./terminus auth:login --machine-token="${TERMINUS_TOKEN}"
+
+            # 3. Add Pantheon to known hosts to prevent SSH hanging
+            ssh-keyscan -p 2222 codeserver.dev.${TERMINUS_SITE}.drush.in >> ~/.ssh/known_hosts
+
+            # 4. Configure Git and push to Pantheon
+            # Note: We use --force to ensure the Pantheon repo matches our GitHub "source of truth"
+            git config --global user.email "circleci@example.com"
+            git config --global user.name "CircleCI Deployer"
+            git remote add pantheon ssh://codeserver.dev.${TERMINUS_SITE}@codeserver.dev.${TERMINUS_SITE}.drush.in:2222/~/repository.git
+            git push pantheon main --force
 
 # Orchestrate the jobs with workflows
 workflows:
@@ -43,5 +59,4 @@ workflows:
             - build_and_test
           filters:
             branches:
-              only: main # Deployment only triggers on the main branch
-
+              only: main # Only deploy when changes are pushed to the main branch
