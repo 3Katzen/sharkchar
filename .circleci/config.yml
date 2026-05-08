@@ -41,35 +41,31 @@ jobs:
       - run:
           name: "Install Terminus and Deploy to Pantheon"
           command: |
-            # 1. Dynamically find and download the latest Terminus release
-            export TERMINUS_RELEASE=$(curl --silent "https://api.github.com/repos/pantheon-systems/terminus/releases/latest" | jq -r .tag_name)
-            echo "Installing Terminus version: $TERMINUS_RELEASE"
-            curl -L "https://github.com/pantheon-systems/terminus/releases/download/$TERMINUS_RELEASE/terminus.phar" -o terminus
+            # 1. Install Terminus
+            export TERMINUS_RELEASE=$(curl --silent "https://github.com" | jq -r .tag_name)
+            curl -L "https://github.com" -o terminus
             chmod +x terminus
 
-            # 2. Verify it's a valid PHP binary
-            ./terminus --version
+            # 2. Authenticate (Critical: We do this and then run the commands)
+            ./terminus auth:login --machine-token="${TERMINUS_TOKEN}"
 
-            # 3. Wake up the Pantheon environment and get the specific host
-            echo "Waking up Pantheon dev environment..."
+            # 3. Wake up and set Git Mode
+            echo "Waking up Pantheon environment..."
             ./terminus env:wake ${TERMINUS_SITE}.dev
+            ./terminus connection:set ${TERMINUS_SITE}.dev git
 
-            # Use Terminus to get the exact connection string
+            # 4. Get dynamic connection info
             export PANTHEON_HOST=$(./terminus connection:info ${TERMINUS_SITE}.dev --field=git_host)
             export PANTHEON_REPO=$(./terminus connection:info ${TERMINUS_SITE}.dev --field=git_url)
 
-            # Add the host to known_hosts to prevent hanging
+            # 5. Configure SSH and Git
             ssh-keyscan -p 2222 $PANTHEON_HOST >> ~/.ssh/known_hosts
-
-            # 4. Git deployment to Pantheon
             git config --global user.email "circleci@example.com"
             git config --global user.name "CircleCI Deployer"
 
-            # Make sure Pantheon is in Git mode
-            ./terminus connection:set ${TERMINUS_SITE}.dev git
-
-            # Add remote and push
-            git remote add pantheon $PANTHEON_REPO
+            # 6. Push to Pantheon
+            # We use '|| true' on remote add in case it was already added in a retry
+            git remote add pantheon $PANTHEON_REPO || true
             git push pantheon main --force
 
 # Workflows coordinate the execution of jobs
