@@ -50,19 +50,26 @@ jobs:
             # 2. Verify it's a valid PHP binary
             ./terminus --version
 
-            # 3. Authenticate with the machine token set in environment variables
-            ./terminus auth:login --machine-token="${TERMINUS_TOKEN}"
+            # 3. Wake up the Pantheon environment and get the specific host
+            echo "Waking up Pantheon dev environment..."
+            ./terminus env:wake ${TERMINUS_SITE}.dev
 
-            # 4. Prevent SSH key confirmation prompts
-            ssh-keyscan -p 2222 codeserver.dev.${TERMINUS_SITE}.drush.in >> ~/.ssh/known_hosts
+            # Use Terminus to get the exact connection string
+            export PANTHEON_HOST=$(./terminus connection:info ${TERMINUS_SITE}.dev --field=git_host)
+            export PANTHEON_REPO=$(./terminus connection:info ${TERMINUS_SITE}.dev --field=git_url)
 
-            # 5. Git deployment to Pantheon
+            # Add the host to known_hosts to prevent hanging
+            ssh-keyscan -p 2222 $PANTHEON_HOST >> ~/.ssh/known_hosts
+
+            # 4. Git deployment to Pantheon
             git config --global user.email "circleci@example.com"
             git config --global user.name "CircleCI Deployer"
 
-            # Add Pantheon as a remote and push current main branch
-            # We use --force to ensure Pantheon stays in sync with GitHub
-            git remote add pantheon ssh://codeserver.dev.${TERMINUS_SITE}@codeserver.dev.${TERMINUS_SITE}.drush.in:2222/~/repository.git
+            # Make sure Pantheon is in Git mode
+            ./terminus connection:set ${TERMINUS_SITE}.dev git
+
+            # Add remote and push
+            git remote add pantheon $PANTHEON_REPO
             git push pantheon main --force
 
 # Workflows coordinate the execution of jobs
