@@ -41,30 +41,26 @@ jobs:
       - run:
           name: "Install Terminus and Deploy to Pantheon"
           command: |
-            # 1. Install Terminus
-            export TERMINUS_RELEASE=$(curl --silent "https://github.com" | jq -r .tag_name)
+            # 1. Download a specific, stable version of Terminus (4.2.1)
+            # This avoids GitHub API rate limits and HTML parse errors
             curl -L "https://github.com" -o terminus
             chmod +x terminus
 
-            # 2. Authenticate (Critical: We do this and then run the commands)
+            # 2. Authenticate and wake up environment
             ./terminus auth:login --machine-token="${TERMINUS_TOKEN}"
-
-            # 3. Wake up and set Git Mode
-            echo "Waking up Pantheon environment..."
             ./terminus env:wake ${TERMINUS_SITE}.dev
             ./terminus connection:set ${TERMINUS_SITE}.dev git
 
-            # 4. Get dynamic connection info
+            # 3. Get connection details dynamically
             export PANTHEON_HOST=$(./terminus connection:info ${TERMINUS_SITE}.dev --field=git_host)
             export PANTHEON_REPO=$(./terminus connection:info ${TERMINUS_SITE}.dev --field=git_url)
 
-            # 5. Configure SSH and Git
+            # 4. SSH and Git Configuration
             ssh-keyscan -p 2222 $PANTHEON_HOST >> ~/.ssh/known_hosts
             git config --global user.email "circleci@example.com"
             git config --global user.name "CircleCI Deployer"
 
-            # 6. Push to Pantheon
-            # We use '|| true' on remote add in case it was already added in a retry
+            # 5. Deployment
             git remote add pantheon $PANTHEON_REPO || true
             git push pantheon main --force
 
