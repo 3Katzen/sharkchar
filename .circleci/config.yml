@@ -43,6 +43,8 @@ jobs:
           command: |
             # 1. Download and install Terminus
             curl -L https://github.com -o terminus
+            # Verify the file is not an HTML error before continuing
+            if grep -q "<!DOCTYPE html>" terminus; then echo "Error: Downloaded HTML instead of binary"; exit 1; fi
             chmod +x terminus
 
             # 2. Authenticate with the machine token set in environment variables
